@@ -5,7 +5,7 @@ trigger:
 
     include:
 
-      Devops-Test
+      main
 
  pool:
 
