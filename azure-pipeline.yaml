@@ -1,16 +1,8 @@
-
 trigger:
+- master
 
-  branches:
-
-    include:
-
-      main
-
- pool:
-
-  vmImage: "ubuntu-latest"
-
+pool:
+  vmImage: 'ubuntu-latest'
 stages:
 
 # Build Stage
