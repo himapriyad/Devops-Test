@@ -1,59 +1,146 @@
-trigger:
-- main
+Skip to content
+Search or jump to…
+Pull requests
+Issues
+Marketplace
+Explore
+ 
+@himapriyad 
+himapriyad
+/
+terraform-Build-Deploy
+Public
+Code
+Issues
+Pull requests
+Actions
+Projects
+Wiki
+Security
+Insights
+Settings
+terraform-Build-Deploy/Azure-Terraform-Build-Artifacts/pipelines/Production-Pipeline.yaml
+@thomast1906
+thomast1906 Add files via upload
+…
+Latest commit 7f5efbb on Nov 2, 2020
+ History
+ 1 contributor
+117 lines (101 sloc)  4.62 KB
 
-pool:
-  vmImage: 'ubuntu-latest'
-stages:
+name: $(BuildDefinitionName)_$(date:yyyyMMdd)$(rev:.r)
 
-# Build Stage
+trigger: none
 
-- stage: Build
+pr: none
 
-  displayName: Build Stage
+stages :        
+  - stage: terraform_plan
+    jobs:
+      - job: terraform_plan
+        steps:
+              - checkout: self
 
-  jobs:
+              - task: TerraformInstaller@0
+                displayName: 'install'
+                inputs:
+                  terraformVersion: '0.13.4'
 
-  - job: Build
+              - task: TerraformTaskV1@0
+                displayName: 'init'
+                inputs:
+                  provider: 'azurerm'
+                  command: 'init'
+                  backendServiceArm: 'tamopstf'
+                  backendAzureRmResourceGroupName: 'tamopstfstates'
+                  backendAzureRmStorageAccountName: 'tfstatedevops'
+                  backendAzureRmContainerName: 'azureterraformbuildartifacts'
+                  backendAzureRmKey: 'terraform.tfstate'
+                  workingDirectory: '$(System.DefaultWorkingDirectory)/terraform/'
 
-    displayName: Build Job
+              - task: TerraformTaskV1@0
+                displayName: 'plan'
+                inputs:
+                  provider: 'azurerm'
+                  command: 'plan'
+                  commandOptions: '-input=false -var-file="../vars/production/production.tfvars"'
+                  environmentServiceNameAzureRM: 'tamopstf'
+                  workingDirectory: '$(System.DefaultWorkingDirectory)/terraform/'
+              
+              - task: ArchiveFiles@2
+                inputs:
+                  rootFolderOrFile: '$(Build.SourcesDirectory)'
+                  includeRootFolder: false
+                  archiveType: 'tar'
+                  tarCompression: 'gz'
+                  archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).tgz'
+                  replaceExistingArchive: true
+                  displayName: 'Create Plan Artifact'
 
-    steps:
+              - task: PublishBuildArtifacts@1
+                inputs:
+                  PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+                  ArtifactName: '$(Build.BuildId)-tfplan'
+                  publishLocation: 'Container'
+                  displayName: 'Publish Plan Artifact'    
 
-## Publish Artifacts pipeline code in addition to Build and Push          
+              - task: DeleteFiles@1
+                displayName: 'Remove unneeded files'
+                inputs:
+                  contents: |
+                    .terraform
+                    tfplan
+  - stage: terraform_apply
+    dependsOn: [terraform_plan]
+    condition: succeeded('terraform_plan')
+    jobs:
+      - job: terraform_apply
+        steps:
+              - checkout: none
 
-    - bash: echo Contents in System Default Working Directory; ls -R $(System.DefaultWorkingDirectory)        
+              - task: DownloadBuildArtifacts@0
+                inputs:
+                  artifactName: '$(Build.BuildId)-tfplan'
+                  displayName: 'Download Plan Artifact'
 
-    - bash: echo Before copying Contents in Build Artifact Directory; ls -R $(Build.ArtifactStagingDirectory)    
+              - task: ExtractFiles@1
+                inputs:
+                  archiveFilePatterns: '$(System.ArtifactsDirectory)/$(Build.BuildId)-tfplan/$(Build.BuildId).tgz'
+                  destinationFolder: '$(System.DefaultWorkingDirectory)/'
+                  cleanDestinationFolder: false
+                  displayName: 'Extract Terraform Plan Artifact'
 
-## Task-1: Copy files (Copy files from a source folder to target folder)
+              - task: TerraformInstaller@0
+                displayName: 'install'
+                inputs:
+                  terraformVersion: '0.13.4'
 
-## Source Directory: $(System.DefaultWorkingDirectory)/terraform
+              - task: TerraformTaskV1@0
+                displayName: 'init'
+                inputs:
+                  provider: 'azurerm'
+                  command: 'init'
+                  backendServiceArm: 'tamopstf'
+                  backendAzureRmResourceGroupName: 'tamopstfstates'
+                  backendAzureRmStorageAccountName: 'tfstatedevops'
+                  backendAzureRmContainerName: 'azureterraformbuildartifacts'
+                  backendAzureRmKey: 'terraform.tfstate'
+                  workingDirectory: '$(System.DefaultWorkingDirectory)/terraform/'
 
-    # Target Directory: $(Build.ArtifactStagingDirectory)
+              - task: TerraformTaskV1@0
+                displayName: 'plan'
+                inputs:
+                  provider: 'azurerm'
+                  command: 'plan'
+                  commandOptions: '-input=false -var-file="../vars/production/production.tfvars"'
+                  environmentServiceNameAzureRM: 'tamopstf'
+                  workingDirectory: '$(System.DefaultWorkingDirectory)/terraform/'
 
-    - task: CopyFiles@2
-
-      inputs:
-
-        SourceFolder: '$(System.DefaultWorkingDirectory)/terraform'
-
-        Contents: '**'
-
-        TargetFolder: '$(Build.ArtifactStagingDirectory)'
-
-        OverWrite: true
-
-    # List files from Build Artifact Staging Directory - After Copy
-
-    - bash: echo After copying to Build Artifact Directory; ls -R $(Build.ArtifactStagingDirectory)  
-
-    # Task-2: Publish build artifacts (Publish build to Azure Pipelines)          
-
-    - task: PublishBuildArtifacts@1
-
-      inputs:
-
-        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-
-        ArtifactName: 'terraform-manifests'
-
+              - task: TerraformTaskV1@0
+                displayName: 'apply'
+                inputs:
+                  provider: 'azurerm'
+                  command: 'apply'
+                  commandOptions: '-input=false -auto-approve -var-file="../vars/production/production.tfvars"'
+                  environmentServiceNameAzureRM: 'tamopstf'
+                  workingDirectory: '$(System.DefaultWorkingDirectory)/terraform/'
