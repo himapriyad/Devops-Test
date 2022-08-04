@@ -1,1 +1,8 @@
 
+pool: 
+  vmImage: 'ubuntu-latest'
+
+stages :
+  - stage: plan_and_apply
+    jobs:
+      - job: terraform_apply_develop
