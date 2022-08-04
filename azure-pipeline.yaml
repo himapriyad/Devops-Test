@@ -65,4 +65,3 @@ stages:
 
         ArtifactName: 'terraform-manifests'
 
-        publishLocation: 'Container'  
